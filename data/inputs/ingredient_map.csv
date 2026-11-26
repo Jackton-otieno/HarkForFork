@@ -1,0 +1,9 @@
+ingredient,group,kfct_protein_code,kfct_aa_code,aa_fallback_id,digestibility,digestibility_source,notes
+maize_flour,cereal,1022,,USDA-20316,0.85,ASSUMED - typical literature value,Whole maize flour is the usual base for uji
+sorghum_flour,cereal,1040,1039,FEED-SORGHUM,0.74,ASSUMED - typical literature value,KFCT has amino acids for the white grain (1039) not the flour (1040); same grain
+bulrush_millet_flour,cereal,1024,1024,USDA-20031,0.80,ASSUMED - typical literature value,Bulrush millet = mawele
+common_bean,legume,3004,3004,USDA-16027,0.78,ASSUMED - typical literature value,Kidney beans used as the common-bean reference
+cowpea,legume,3011,,USDA-16062,0.80,ASSUMED - typical literature value,
+pigeon_pea,legume,3021,,USDA-16101,0.75,ASSUMED - typical literature value,
+groundnut,legume,10009,10009,USDA-16087,0.88,ASSUMED - typical literature value,
+soybean,legume,3022,,USDA-16108,0.90,ASSUMED - typical literature value,

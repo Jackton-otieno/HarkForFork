@@ -167,7 +167,6 @@ def top_distinct_blends(
         excluded.append(max(used, key=used.get))
     return blends
 
-    
 
 if __name__ == "__main__":
     ing, ref = load_data()

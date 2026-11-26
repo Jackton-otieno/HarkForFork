@@ -1,0 +1,9 @@
+id,food_name,unit,protein_g_per_100g,lysine,methionine,cystine,threonine,tryptophan,source
+USDA-20316,"Corn flour, whole-grain, white",g_per_100g_food,6.93,0.195,0.145,0.125,0.26,0.05,"USDA FoodData Central SR Legacy 20316 (threonine and tryptophan as published to 2 decimals)"
+USDA-16062,"Cowpeas, common (blackeyes, crowder, southern), mature seeds, raw",g_per_100g_food,23.52,1.591,0.335,0.26,0.895,0.29,USDA FoodData Central SR Legacy 16062
+USDA-16101,"Pigeon peas (red gram), mature seeds, raw",g_per_100g_food,21.7,1.521,0.243,0.25,0.767,0.212,USDA FoodData Central SR Legacy 16101
+USDA-16108,"Soybeans, mature seeds, raw",g_per_100g_food,36.49,2.706,0.547,0.655,1.766,0.591,USDA FoodData Central SR Legacy 16108
+USDA-16027,"Beans, kidney, all types, mature seeds, raw",g_per_100g_food,23.58,1.618,0.355,0.256,0.992,0.279,USDA FoodData Central SR Legacy 16027
+USDA-16087,"Peanuts, all types, raw",g_per_100g_protein,,3.56,1.19,1.29,3.37,0.99,USDA FoodData Central SR Legacy 16087 (as % of protein)
+USDA-20031,"Millet, raw (proso)",g_per_100g_food,11.02,0.212,0.221,0.212,0.353,0.119,USDA FoodData Central SR Legacy 20031
+FEED-SORGHUM,"Sorghum grain",g_per_100g_protein,,2.2,1.7,1.8,3.3,1.0,"Feedipedia (FAO, INRAE, CIRAD, AFZ): Lys, Met, Cys from low-tannin grain; Thr, Trp from all types"

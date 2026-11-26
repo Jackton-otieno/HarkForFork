@@ -14,11 +14,13 @@ st.caption("Find the best local legume + cereal blend for a protein flour - befo
 
 ing, ref = load_data()
 
-if (ing["source"].str.upper() == "PLACEHOLDER").any():
-    st.error(
-        "⚠️ Some ingredient values are PLACEHOLDERS, not real data. "
-        "Replace them from the Kenya Food Composition Tables / KAMIS before the pitch "
-        "(see data/DATA_SOURCES.md)."
+_src_cols = [c for c in ("source", "aa_source", "price_source") if c in ing.columns]
+_placeholder = ing[_src_cols].apply(lambda col: col.str.upper().str.startswith("PLACEHOLDER")).any(axis=1)
+if _placeholder.any():
+    st.warning(
+        "⚠️ Some values are still PLACEHOLDERS: "
+        + ", ".join(ing.loc[_placeholder, "ingredient"])
+        + ". Collect their market prices before the pitch (see data/DATA_SOURCES.md)."
     )
 
 # ---------------- Sidebar: user goals ----------------
@@ -48,14 +50,14 @@ table = pd.DataFrame(rows, index=[f"Blend {chr(65 + i)}" for i in range(len(rows
 ing_cols = [c for c in table.columns if c.endswith(" %")]
 metric_cols = ["protein g/100g", "AA score", "PDCAAS", "limiting AA", "cost KES/kg"]
 table = table[ing_cols + metric_cols]
-st.dataframe(table, use_container_width=True)
+st.dataframe(table, width="stretch")
 
 cols = st.columns(len(blends))
 for col, (name, b) in zip(cols, zip(table.index, blends)):
     shares = {k: v for k, v in b.fractions.items() if v > 0.001}
     fig = px.pie(names=list(shares), values=list(shares.values()), title=name, hole=0.45)
     fig.update_layout(height=280, margin=dict(t=40, b=0, l=0, r=0), showlegend=True)
-    col.plotly_chart(fig, use_container_width=True)
+    col.plotly_chart(fig, width="stretch")
 
 # ---------------- Trade-off curve ----------------
 st.subheader("Cost vs protein trade-off")
@@ -65,7 +67,7 @@ if not curve.empty:
     fig = px.line(curve, x="protein g/100g", y="cost KES/kg", markers=True,
                   hover_data=["AA score", "limiting AA"])
     fig.add_vline(x=min_protein, line_dash="dash")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     st.caption("Each point is the cheapest blend that reaches that protein level "
                f"with an amino-acid score of at least {min_score}.")
 
@@ -86,4 +88,4 @@ if st.button("Explain with AI"):
             st.error(f"Bedrock call failed: {e}")
 
 with st.expander("Data provenance"):
-    st.dataframe(ing[["ingredient", "source"]], use_container_width=True)
+    st.dataframe(ing[["ingredient"] + _src_cols], width="stretch")

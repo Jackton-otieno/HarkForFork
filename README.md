@@ -103,3 +103,11 @@ in the security group to your own IP only.
   the numbers the optimiser produced. Its output is labelled model-generated.
 - **Limits:** predicts nutrition and cost, not taste, texture or shelf life. Food-table values are
   averages. Prices change weekly. The tool narrows the kitchen trial to 2–3 blends; it does not replace it.
+
+## Rebuilding the data
+The optimiser reads `data/ingredients.csv`. It is built from the raw Kenya Food Composition Tables:
+```bash
+python data/build_ingredients.py      # Windows: python data\build_ingredients.py
+```
+This rewrites `data/ingredients.csv` and `data/cleaning_report.md`. To change a price, edit
+`data/inputs/prices.csv` and rerun; to use a different KFCT item, edit `data/inputs/ingredient_map.csv`.

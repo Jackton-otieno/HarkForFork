@@ -1,9 +1,9 @@
-ingredient,group,protein_g_per_100g,lysine_mg_per_g_protein,saa_mg_per_g_protein,threonine_mg_per_g_protein,tryptophan_mg_per_g_protein,digestibility,price_kes_per_kg,source
-sorghum_flour,cereal,10.0,21,30,33,11,0.74,90,PLACEHOLDER
-finger_millet_flour,cereal,7.5,27,38,38,13,0.80,140,PLACEHOLDER
-maize_flour,cereal,8.5,27,38,36,7,0.85,75,PLACEHOLDER
-common_bean,legume,22.0,68,21,40,11,0.78,160,PLACEHOLDER
-cowpea,legume,23.0,66,24,36,11,0.80,150,PLACEHOLDER
-pigeon_pea,legume,21.0,68,23,34,8,0.75,170,PLACEHOLDER
-groundnut,legume,25.0,35,24,27,10,0.88,250,PLACEHOLDER
-soybean,legume,36.0,63,28,39,13,0.90,120,PLACEHOLDER
+ingredient,group,protein_g_per_100g,lysine_mg_per_g_protein,saa_mg_per_g_protein,threonine_mg_per_g_protein,tryptophan_mg_per_g_protein,digestibility,price_kes_per_kg,source,aa_source,price_source
+maize_flour,cereal,7.9,28.1,39.0,37.5,7.2,0.85,100.0,"KFCT 2018 code 1022 Maize, whole, flour, raw",USDA FoodData Central SR Legacy 20316 (threonine and tryptophan as published to 2 decimals) (KFCT has no complete amino-acid data for this food),"REACH JMMI Kenya Q4 2025, median retail maize flour (40 markets, 7 ASAL counties, 22 Dec 2025 - 11 Jan 2026)"
+sorghum_flour,cereal,10.8,34.7,30.4,41.7,7.4,0.74,90.0,"KFCT 2018 code 1040 Sorghum, grain, white, flour","KFCT 2018 code 1039 Sorghum, grain, white, dry, raw",PLACEHOLDER - collect at market
+bulrush_millet_flour,cereal,10.5,45.7,32.4,35.2,13.3,0.8,140.0,"KFCT 2018 code 1024 Millet, bulrush, flour","KFCT 2018 code 1024 Millet, bulrush, flour",PLACEHOLDER - collect at market
+common_bean,legume,20.5,69.8,18.0,46.3,9.3,0.78,140.0,"KFCT 2018 code 3004 Beans, kidney, dry, raw","KFCT 2018 code 3004 Beans, kidney, dry, raw","REACH JMMI Kenya Q4 2025, median retail dried beans (40 markets, 7 ASAL counties, 22 Dec 2025 - 11 Jan 2026)"
+cowpea,legume,25.3,67.6,25.3,38.1,12.3,0.8,130.0,"KFCT 2018 code 3011 Cowpeas, dry, raw",USDA FoodData Central SR Legacy 16062 (KFCT has no complete amino-acid data for this food),"REACH JMMI Kenya Q4 2025, median retail cowpeas (40 markets, 7 ASAL counties, 22 Dec 2025 - 11 Jan 2026)"
+pigeon_pea,legume,20.9,70.1,22.7,35.3,9.8,0.75,120.0,"KFCT 2018 code 3021 Pigeon peas, dry, raw",USDA FoodData Central SR Legacy 16101 (KFCT has no complete amino-acid data for this food),"REACH JMMI Kenya Q4 2025, median retail pigeon peas (40 markets, 7 ASAL counties, 22 Dec 2025 - 11 Jan 2026)"
+groundnut,legume,20.1,35.5,21.2,39.3,9.1,0.88,250.0,"KFCT 2018 code 10009 Nut, ground nut, with skin, unsalted, dry, raw","KFCT 2018 code 10009 Nut, ground nut, with skin, unsalted, dry, raw",PLACEHOLDER - collect at market
+soybean,legume,34.0,74.2,32.9,48.4,16.2,0.9,120.0,"KFCT 2018 code 3022 Soybean, dry, raw",USDA FoodData Central SR Legacy 16108 (KFCT has no complete amino-acid data for this food),PLACEHOLDER - collect at market
