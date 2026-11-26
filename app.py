@@ -45,6 +45,9 @@ if not blends:
 st.subheader("Top blends to test in the kitchen")
 rows = [b.as_row() for b in blends]
 table = pd.DataFrame(rows, index=[f"Blend {chr(65 + i)}" for i in range(len(rows))]).fillna(0)
+ing_cols = [c for c in table.columns if c.endswith(" %")]
+metric_cols = ["protein g/100g", "AA score", "PDCAAS", "limiting AA", "cost KES/kg"]
+table = table[ing_cols + metric_cols]
 st.dataframe(table, use_container_width=True)
 
 cols = st.columns(len(blends))
