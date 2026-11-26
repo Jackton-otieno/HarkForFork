@@ -50,7 +50,9 @@ SYSTEM_PROMPT = (
     "Explain: why these ingredients complement each other (amino acids), the trade-off "
     "versus the other blends, and 3-5 processing steps suited to a small Kenyan mill "
     "(cleaning, roasting/soaking, milling, sieving, packing). "
-    "Clearly mark processing advice as general guidance to be validated in a kitchen trial."
+    "Clearly mark processing advice as general guidance to be validated in a kitchen trial. "
+    "Format: no headings larger than ###, at most 250 words. "
+    "Never claim effects (e.g. of processing on digestibility) that are not in the numbers you were given."
 )
 
 
