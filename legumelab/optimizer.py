@@ -148,22 +148,26 @@ def top_distinct_blends(
     k: int = 3,
     **kwargs,
 ) -> list[Blend]:
-    """Up to k different blends to test in the kitchen.
+    """Up to k genuinely different blends to test in the kitchen.
 
-    After each solution, the main ingredient of that blend is capped lower so
-    the next solution is genuinely different, not a near-copy.
+    After each solution, its main legume (the protein source) is excluded, so
+    the next blend is built on a different legume instead of being a near-copy.
     """
     blends: list[Blend] = []
-    max_share = dict(kwargs.pop("max_share", None) or {})
+    excluded = list(kwargs.pop("excluded", None) or [])
+    legumes = set(ing.loc[ing["group"] == "legume", "ingredient"])
     for _ in range(k):
-        b = cheapest_blend(ing, ref, min_protein, min_score, max_share=max_share, **kwargs)
+        b = cheapest_blend(ing, ref, min_protein, min_score, excluded=excluded, **kwargs)
         if b is None:
             break
         blends.append(b)
-        top = max(b.fractions, key=b.fractions.get)
-        max_share[top] = max(0.0, b.fractions[top] - 0.15)
+        used = {n: v for n, v in b.fractions.items() if n in legumes and v > 0.001}
+        if not used:
+            break
+        excluded.append(max(used, key=used.get))
     return blends
 
+    
 
 if __name__ == "__main__":
     ing, ref = load_data()
