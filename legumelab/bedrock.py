@@ -52,7 +52,10 @@ SYSTEM_PROMPT = (
     "(cleaning, roasting/soaking, milling, sieving, packing). "
     "Clearly mark processing advice as general guidance to be validated in a kitchen trial. "
     "Format: no headings larger than ###, at most 250 words. "
-    "Never claim effects (e.g. of processing on digestibility) that are not in the numbers you were given."
+    "Never claim effects (e.g. of processing on digestibility) that are not in the numbers you were given. "
+    "Compare blends ONLY on the fields provided (shares, protein, AA score, PDCAAS, limiting AA, cost). "
+    "Do not mention shelf life, taste, texture, carbohydrates or any property not in those fields. "
+    "Before stating that one blend costs more or less than another, check the cost numbers."
 )
 
 
@@ -63,7 +66,7 @@ def _explain_cached(payload: str) -> str:
         modelId=MODEL_ID,
         system=[{"text": SYSTEM_PROMPT}],
         messages=[{"role": "user", "content": [{"text": payload}]}],
-        inferenceConfig={"maxTokens": 700, "temperature": 0.3},
+        inferenceConfig={"maxTokens": 700, "temperature": 0.1},
     )
     return resp["output"]["message"]["content"][0]["text"]
 
