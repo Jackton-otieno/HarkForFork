@@ -147,13 +147,24 @@ def _converse(messages: list[dict]) -> str:
     _rate_limit()
     args = dict(modelId=MODEL_ID, system=[{"text": SYSTEM_PROMPT}], messages=messages)
     try:
-        resp = _runtime().converse(**args, inferenceConfig={"maxTokens": 700, "temperature": 0.1})
+        resp = _runtime().converse(**args, inferenceConfig={"maxTokens": 2000, "temperature": 0.1})
     except Exception as e:
         if "temperature" not in str(e):
             raise
         _rate_limit()
-        resp = _runtime().converse(**args, inferenceConfig={"maxTokens": 700})
-    return resp["output"]["message"]["content"][0]["text"]
+        resp = _runtime().converse(**args, inferenceConfig={"maxTokens": 2000})
+    return _reply_text(resp)
+
+
+def _reply_text(resp: dict) -> str:
+    """Join the text blocks of a Converse reply. Newer models may put a reasoning block
+    (no "text" key) before the answer, so we never assume the first block is text."""
+    blocks = resp["output"]["message"]["content"]
+    text = "\n".join(b["text"] for b in blocks if "text" in b).strip()
+    if not text:
+        raise RuntimeError("The model returned no text (stop reason: "
+                           f"{resp.get('stopReason', 'unknown')}).")
+    return text
 
 
 @lru_cache(maxsize=256)
