@@ -8,7 +8,6 @@ from the Workshop Studio event page into your terminal). Never hard-code keys.
 """
 from __future__ import annotations
 
-import json
 import re
 import os
 import time
@@ -58,8 +57,11 @@ SYSTEM_PROMPT = (
     "Compare blends ONLY on the fields provided (shares, protein, AA score, PDCAAS, limiting AA, cost). "
     "Do not mention shelf life, taste, texture, carbohydrates or any property not in those fields. "
     "Before stating that one blend costs more or less than another, check the cost numbers. "
-    "To explain why an ingredient is in the blend, use ONLY ingredient_roles: its share of the "
-    "blend's protein, lysine and SAA, its own protein and its price. Do not give other reasons."
+    "To explain why an ingredient is in the blend, use ONLY its listed share of the blend's "
+    "protein, lysine and SAA, its own protein and its price. Do not give other reasons. "
+    "You are given a fact sheet. State only facts from it; you may quote cost differences "
+    "that appear in it, but do not calculate new percentages or ratios. Every blend listed "
+    "meets every constraint; never say a blend breaks a constraint."
 )
 
 # Topics we have no data on; if the model mentions one, we ask it once to rewrite.
@@ -78,6 +80,43 @@ def tidy_headings(text: str) -> str:
     return re.sub(r"^#{1,3} ", "#### ", text, flags=re.M)
 
 
+def _pct(row: dict) -> str:
+    return ", ".join(f"{k[:-2].replace('_', ' ')} {v:g}%" for k, v in row.items()
+                     if k.endswith(" %") and v)
+
+
+def fact_sheet(blend_row: dict, alternatives: list[dict], user_goal: str,
+               roles: list[dict] | None = None) -> str:
+    """The data the model may use, as plain sentences (Guardrails grounds best on prose)."""
+    def describe(name: str, r: dict) -> str:
+        return (f"{name} is {_pct(r)}. It costs {r['cost KES/kg']:g} KES per kg, has "
+                f"{r['protein g/100g']:g} g protein per 100 g, an amino-acid score of "
+                f"{r['AA score']:g}, a PDCAAS of {r['PDCAAS']:g}, and its limiting amino acid "
+                f"is {r['limiting AA']}.")
+    lines = [f"The user's targets are: {user_goal}.",
+             "The optimiser found the cheapest blends that meet every target. "
+             "Every blend listed below meets every target and constraint.",
+             describe("The chosen blend", blend_row)]
+    for i, alt in enumerate(alternatives, 1):
+        diff = alt["cost KES/kg"] - blend_row["cost KES/kg"]
+        lines.append(describe(f"Alternative blend {i}", alt) +
+                     f" It costs {abs(diff):g} KES per kg {'more' if diff > 0 else 'less'} "
+                     "than the chosen blend." if diff else describe(f"Alternative blend {i}", alt) +
+                     " It costs the same as the chosen blend.")
+    for r in roles or []:
+        n = r["ingredient"].replace("_", " ")
+        lines.append(
+            f"In the chosen blend, {n} is {r['share_of_blend_pct']:g}% of the blend and supplies "
+            f"{r['supplies_pct_of_blend_protein']:g}% of the blend's protein, "
+            f"{r['supplies_pct_of_blend_lysine']:g}% of its lysine and "
+            f"{r['supplies_pct_of_blend_saa']:g}% of its sulphur amino acids (SAA). "
+            f"{n.capitalize()} has {r['own_protein_g_per_100g']:g} g protein per 100 g and costs "
+            f"{r['own_price_kes_per_kg']:g} KES per kg.")
+    lines.append("SAA means methionine plus cysteine. PDCAAS is protein quality corrected for "
+                 "digestibility; 1.0 is the maximum.")
+    return "\n".join(lines)
+
+
 def _converse(messages: list[dict]) -> str:
     _rate_limit()
     resp = _runtime().converse(
@@ -90,21 +129,39 @@ def _converse(messages: list[dict]) -> str:
 
 
 @lru_cache(maxsize=256)
-def _explain_cached(payload: str) -> tuple[str, tuple[str, ...]]:
-    """Returns (text, unsupported terms still present after one rewrite)."""
-    messages = [{"role": "user", "content": [{"text": payload}]}]
+def _explain_cached(facts: str, query: str) -> tuple[str, tuple[str, ...], tuple]:
+    """Returns (text, unsupported terms left, Guardrails grounding results).
+
+    At most one rewrite: if the answer mentions topics we have no data on, or Guardrails
+    scores it below the grounding threshold, Claude is asked once to fix it.
+    """
+    messages = [{"role": "user", "content": [{"text": "Fact sheet:\n" + facts}]}]
     text = _converse(messages)
     bad = unsupported_terms(text)
-    if bad:  # one rewrite, telling the model exactly what to remove
+    grounding = _safe_grounding(facts, query, text)
+    failed = [g for g in grounding if not g[3] and not g[0].startswith("error")]
+    if bad or failed:
+        problems = []
+        if bad:
+            problems.append("remove every statement about " + ", ".join(bad) + " (no data on these)")
+        if failed:
+            problems.append("some statements are not supported by the fact sheet; keep only "
+                            "statements that repeat facts from it, and do not calculate new numbers")
         messages += [
             {"role": "assistant", "content": [{"text": text}]},
-            {"role": "user", "content": [{"text": (
-                "Rewrite your answer. Remove every statement about: " + ", ".join(bad) +
-                ". We have no data on these. Keep everything else, use only the data given.")}]},
+            {"role": "user", "content": [{"text": "Rewrite your answer: " + "; ".join(problems) + "."}]},
         ]
         text = _converse(messages)
         bad = unsupported_terms(text)
-    return tidy_headings(text), tuple(bad)
+        grounding = _safe_grounding(facts, query, text)
+    return tidy_headings(text), tuple(bad), grounding
+
+
+def _safe_grounding(facts: str, query: str, text: str) -> tuple:
+    try:
+        return grounding_check(facts, query, text)
+    except Exception as e:  # the explanation still shows if the guardrail call fails
+        return (("error: " + str(e)[:120], 0.0, 0.0, True),)
 
 
 @lru_cache(maxsize=128)
@@ -142,18 +199,9 @@ def explain_blend(blend_row: dict, alternatives: list[dict], user_goal: str,
     Returns (markdown text, unsupported topics the model still mentioned,
              Guardrails grounding results - empty if no guardrail is configured).
     """
-    payload = json.dumps(
-        {"user_goal": user_goal, "chosen_blend": blend_row, "ingredient_roles": roles or [],
-         "other_blends": alternatives},
-        sort_keys=True,
-    )
-    text, bad = _explain_cached(payload)  # cached: same input -> no second model call
-    try:
-        grounding = grounding_check(payload, "Explain this blend: " + user_goal, text)
-    except Exception as e:  # the explanation still shows if the guardrail call fails
-        grounding = (("error: " + str(e)[:120], 0.0, 0.0, True),)
+    facts = fact_sheet(blend_row, alternatives, user_goal, roles)
+    text, bad, grounding = _explain_cached(facts, "Explain why this blend was chosen: " + user_goal)
     return text, list(bad), grounding
-
 
 @lru_cache(maxsize=1)
 def _account_id() -> str:
