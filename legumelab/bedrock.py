@@ -142,13 +142,17 @@ def verified_summary(blend_row: dict, alternatives: list[dict],
 
 
 def _converse(messages: list[dict]) -> str:
+    """One Converse call. Some newer models (e.g. Claude Sonnet 5) reject `temperature`;
+    for those we retry once without it."""
     _rate_limit()
-    resp = _runtime().converse(
-        modelId=MODEL_ID,
-        system=[{"text": SYSTEM_PROMPT}],
-        messages=messages,
-        inferenceConfig={"maxTokens": 700, "temperature": 0.1},
-    )
+    args = dict(modelId=MODEL_ID, system=[{"text": SYSTEM_PROMPT}], messages=messages)
+    try:
+        resp = _runtime().converse(**args, inferenceConfig={"maxTokens": 700, "temperature": 0.1})
+    except Exception as e:
+        if "temperature" not in str(e):
+            raise
+        _rate_limit()
+        resp = _runtime().converse(**args, inferenceConfig={"maxTokens": 700})
     return resp["output"]["message"]["content"][0]["text"]
 
 
