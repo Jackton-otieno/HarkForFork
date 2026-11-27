@@ -3,7 +3,8 @@
 **How the data was cleaned:** run `python data/build_ingredients.py`. It reads the raw
 `data/raw/Kenya_Food_Composition_Tables_2018.xlsx`, applies 7 documented steps, writes
 `data/ingredients.csv` and a step-by-step `data/cleaning_report.md`. Inputs it uses:
-`data/inputs/ingredient_map.csv`, `reference_amino_acids.csv`, `prices.csv`.
+`data/inputs/ingredient_map.csv`, `reference_amino_acids.csv`, `faostat_price_map.csv`,
+`retail_prices_reach.csv`, and the raw FAOSTAT file in `data/raw/`.
 
 As of 27 Nov 2026. Each row of `ingredients.csv` names its sources in three columns:
 `source` (protein), `aa_source` (amino acids), `price_source` (price).
@@ -39,12 +40,23 @@ The recommendation is robust to this disagreement.
 ## Digestibility - ASSUMED
 Typical literature values, not yet cited per ingredient. Say "assumed" in the pitch.
 
-## Prices - Sourced / PLACEHOLDER
-- Maize flour, beans, cowpeas, pigeon peas: REACH / Kenya Cash Working Group, Joint Market
-  Monitoring Initiative (JMMI) Q4 2025, median retail prices across 40 markets in 7 ASAL
-  counties, collected 22 Dec 2025 - 11 Jan 2026. Nairobi prices may differ.
-- Sorghum flour, bulrush millet flour, groundnuts, soybeans: PLACEHOLDER. Collect at a Nairobi
-  market (photo of price tag + date + market name) = MEASURED data.
+## Prices - Sourced (FAOSTAT producer prices)
+- FAOSTAT, Producer Prices domain, Kenya, Producer Price (LCU/tonne), annual values, all flagged
+  "Official value". Raw file: `data/raw/FAOSTAT_producer_prices_Kenya_2020-2024.csv`.
+- Price used = mean of 2022-2024 (the 3 latest years all 8 crops share), KES/tonne / 1000.
+  A 3-year mean smooths big swings (e.g. pigeon peas fell from 63,708 to 36,499 KES/t in 2024).
+- Groundnuts: FAOSTAT prices groundnuts in the shell; divided by an ASSUMED 70% kernel out-turn.
+- These are farm-gate prices, the same basis for all 8 ingredients. Our user is a miller who buys
+  grain, so they are the starting point for raw-material cost; the app lets users enter their own.
+- Cross-check: REACH JMMI Q4 2025 retail prices (`data/inputs/retail_prices_reach.csv`) are
+  1.4x-2.6x the FAOSTAT prices. The mark-up differs by crop (cowpeas 2.6x, beans 1.4x), so retail
+  rankings can differ from farm-gate rankings. Stated as a limitation.
+
+## Product-design constraint - ASSUMED
+At farm-gate prices cowpeas are cheaper than every cereal, so without a limit the optimiser
+recommends 100% cowpea, which is not a usable porridge flour. The app therefore caps the legume
+share of the blend (default 40%, slider 10-100%). The default is an assumption to be set from
+kitchen trials.
 
 ## Reference pattern - Sourced (verify)
 FAO/WHO/UNU 2007 adult amino-acid scoring pattern (WHO Technical Report Series 935).

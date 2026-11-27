@@ -7,7 +7,9 @@ Inputs (all in this repository):
     data/raw/Kenya_Food_Composition_Tables_2018.xlsx   raw file, downloaded from FAO
     data/inputs/ingredient_map.csv                     which KFCT item code = which ingredient
     data/inputs/reference_amino_acids.csv              USDA / Feedipedia values for gaps and checks
-    data/inputs/prices.csv                             prices and their sources
+    data/raw/FAOSTAT_producer_prices_Kenya_2020-2024.csv  raw FAOSTAT producer prices
+    data/inputs/faostat_price_map.csv                  which FAOSTAT item = which ingredient
+    data/inputs/retail_prices_reach.csv                retail prices, used only as a cross-check
 
 Outputs:
     data/ingredients.csv        the cleaned table the optimiser reads
@@ -20,7 +22,8 @@ Cleaning steps (numbered the same way in the report):
     4. Convert amino acids from mg per 100 g food to mg per g protein.
     5. Where KFCT has no complete amino-acid data, use the reference source instead.
     6. Cross-check KFCT amino acids against the reference source where both exist.
-    7. Add digestibility and prices, then write ingredients.csv.
+    7. Prices: FAOSTAT producer prices, mean of the last 3 years that all crops share.
+    8. Add digestibility, then write ingredients.csv.
 """
 from __future__ import annotations
 
@@ -34,6 +37,8 @@ RAW = HERE / "raw" / "Kenya_Food_Composition_Tables_2018.xlsx"
 INPUTS = HERE / "inputs"
 OUT_CSV = HERE / "ingredients.csv"
 OUT_REPORT = HERE / "cleaning_report.md"
+FAOSTAT = HERE / "raw" / "FAOSTAT_producer_prices_Kenya_2020-2024.csv"
+N_PRICE_YEARS = 3   # average this many recent years to smooth year-to-year swings
 
 SHEET = "04 USERDATABASE-KFCT2018"
 # Column positions in the KFCT data sheet (0-based), checked against its header rows:
@@ -91,6 +96,58 @@ def load_reference() -> dict:
     return refs
 
 
+def build_prices(log) -> dict:
+    """Step 7: FAOSTAT producer prices (KES per tonne) -> KES per kg for each ingredient."""
+    with open(FAOSTAT, newline="", encoding="utf-8-sig") as f:
+        raw = [r for r in csv.DictReader(f)
+               if r["Element"].startswith("Producer Price (LCU/tonne)") and r["Months"] == "Annual value"]
+    with open(INPUTS / "faostat_price_map.csv", newline="") as f:
+        pmap = list(csv.DictReader(f))
+    with open(INPUTS / "retail_prices_reach.csv", newline="") as f:
+        retail = {r["ingredient"]: float(r["retail_kes_per_kg"]) for r in csv.DictReader(f)}
+    series = {}
+    for r in raw:
+        series.setdefault(r["Item"], {})[int(r["Year"])] = (float(r["Value"]), r["Flag Description"])
+    items = [m["faostat_item"] for m in pmap]
+    missing = [i for i in items if i not in series]
+    assert not missing, f"FAOSTAT file has no rows for {missing}"
+    common = sorted(set.intersection(*(set(series[i]) for i in items)))
+    years = common[-N_PRICE_YEARS:]
+    all_years = sorted({y for i in items for y in series[i]})
+
+    log("## Step 7 - Prices from FAOSTAT producer prices")
+    log("")
+    log(f"Source: FAOSTAT, Producer Prices domain, Kenya, element Producer Price (LCU/tonne), annual "
+        f"values, file `{FAOSTAT.relative_to(HERE.parent)}`. LCU for Kenya = KES. Years where all "
+        f"{len(items)} crops have a price: {common}. Price used = mean of {years}, divided by 1000 "
+        "(tonne -> kg) and by the conversion factor.")
+    log("")
+    head = " | ".join(str(y) for y in all_years)
+    log(f"| Ingredient | FAOSTAT item | {head} (KES/tonne) | Mean used | Factor | **KES/kg** | Retail cross-check (REACH) |")
+    log("|---|---|" + "---|" * len(all_years) + "---|---|---|---|")
+    out = {}
+    for m in pmap:
+        ser = series[m["faostat_item"]]
+        flags = {ser[y][1] for y in years}
+        mean_t = sum(ser[y][0] for y in years) / len(years)
+        factor = float(m["factor"])
+        kes_kg = round(mean_t / 1000 / factor, 1)
+        cells = " | ".join(f"{ser[y][0]:,.0f}" if y in ser else "-" for y in all_years)
+        rt = retail.get(m["ingredient"])
+        rt_txt = f"{rt:.0f} (x{rt / kes_kg:.1f})" if rt else "-"
+        log(f"| {m['ingredient']} | {m['faostat_item']} | {cells} | {mean_t:,.0f} | {factor} | **{kes_kg}** | {rt_txt} |")
+        note = f"; {m['factor_note']}" if m["factor_note"] else ""
+        out[m["ingredient"]] = (kes_kg, f"FAOSTAT producer price, Kenya, {m['faostat_item']}, mean "
+                                        f"{years[0]}-{years[-1]} ({', '.join(sorted(flags))}){note}")
+    log("")
+    log("Producer (farm-gate) prices are lower than shop prices: the REACH column shows retail as a "
+        "multiple of the FAOSTAT price. All 8 ingredients use the same basis, so the comparison between "
+        "them is fair. Our user is a miller who buys grain, so farm-gate prices are the starting point "
+        "for raw-material cost; the app lets the user type in their own prices.")
+    log("")
+    return out
+
+
 def main() -> None:
     log("# Data cleaning report")
     log("")
@@ -114,8 +171,8 @@ def main() -> None:
     refs = load_reference()
     with open(INPUTS / "ingredient_map.csv", newline="") as f:
         mapping = list(csv.DictReader(f))
-    with open(INPUTS / "prices.csv", newline="") as f:
-        prices = {r["ingredient"]: r for r in csv.DictReader(f)}
+    price_lines: list[str] = []
+    prices = build_prices(price_lines.append)
 
     # ---- Steps 2-5
     log("## Steps 2-5 - Pick items, clean values, convert, fill gaps")
@@ -146,17 +203,17 @@ def main() -> None:
             checks.append((m["ingredient"], aa_used, ref_vals, ref_src))
         log(f"| {m['ingredient']} | {m['kfct_protein_code']} {str(prow[COL['name']]).strip()} | {protein} "
             f"| {raw_txt} | {aa_source} |")
-        price = prices[m["ingredient"]]
+        price_kes, price_src = prices[m["ingredient"]]
         out_rows.append({
             "ingredient": m["ingredient"], "group": m["group"],
             "protein_g_per_100g": protein,
             "lysine_mg_per_g_protein": aa_used["lysine"], "saa_mg_per_g_protein": aa_used["saa"],
             "threonine_mg_per_g_protein": aa_used["threonine"], "tryptophan_mg_per_g_protein": aa_used["tryptophan"],
             "digestibility": float(m["digestibility"]),
-            "price_kes_per_kg": float(price["price_kes_per_kg"]),
+            "price_kes_per_kg": price_kes,
             "source": f"KFCT 2018 code {m['kfct_protein_code']} {str(prow[COL['name']]).strip()}",
             "aa_source": aa_source,
-            "price_source": price["price_source"],
+            "price_source": price_src,
         })
     log("")
     log("Step 3 rule: 'tr' (trace) and empty cells are treated as missing. If any of the five amino "
@@ -182,15 +239,19 @@ def main() -> None:
         "partly lab-measured for KFCT 2018); see the sensitivity test in DATA_SOURCES.md.")
     log("")
 
-    # ---- Step 7
+    # ---- Step 7 (computed earlier, reported here in order)
+    for line in price_lines:
+        log(line)
+
+    # ---- Step 8
     fields = list(out_rows[0].keys())
     with open(OUT_CSV, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
         w.writerows(out_rows)
-    log("## Step 7 - Output")
+    log("## Step 8 - Output")
     log(f"Wrote `{OUT_CSV.relative_to(HERE.parent)}` with {len(out_rows)} ingredients. "
-        "Digestibility values are ASSUMED; prices marked PLACEHOLDER still need to be collected.")
+        "Digestibility values are ASSUMED (see DATA_SOURCES.md).")
     OUT_REPORT.write_text("\n".join(report) + "\n")
     print(f"\nReport written to {OUT_REPORT.relative_to(HERE.parent)}")
 

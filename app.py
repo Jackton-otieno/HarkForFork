@@ -28,6 +28,10 @@ st.sidebar.header("Your targets")
 min_protein = st.sidebar.slider("Minimum protein (g per 100 g)", 8.0, 25.0, 15.0, 0.5)
 min_score = st.sidebar.slider("Minimum protein quality (amino-acid score)", 0.5, 1.0, 0.9, 0.05)
 excluded = st.sidebar.multiselect("Exclude ingredients (allergy, availability)", list(ing["ingredient"]))
+max_legume = st.sidebar.slider(
+    "Maximum legume share (%)", 10, 100, 40, 5,
+    help="Product-design limit for taste, texture and cooking. 40% is an assumed default; "
+         "set it from your own kitchen trials.") / 100
 
 st.sidebar.header("Market prices (KES/kg)")
 st.sidebar.caption("Change a price and the recommendation updates.")
@@ -37,18 +41,19 @@ for i, row in ing.iterrows():
     )
 
 # ---------------- Recommended blends ----------------
-blends = top_distinct_blends(ing, ref, min_protein, min_score, k=3, excluded=excluded)
+blends = top_distinct_blends(ing, ref, min_protein, min_score, k=3, excluded=excluded,
+                             max_legume_share=max_legume)
 
 if not blends:
     st.warning("No blend can meet these targets with the selected ingredients. "
-               "Lower the protein or quality target, or allow more ingredients.")
+               "Lower the protein or quality target, raise the maximum legume share, or allow more ingredients.")
     st.stop()
 
 st.subheader("Top blends to test in the kitchen")
 rows = [b.as_row() for b in blends]
 table = pd.DataFrame(rows, index=[f"Blend {chr(65 + i)}" for i in range(len(rows))]).fillna(0)
 ing_cols = [c for c in table.columns if c.endswith(" %")]
-metric_cols = ["cost KES/kg", "protein g/100g", "AA score", "PDCAAS", "limiting AA"]
+metric_cols = ["protein g/100g", "AA score", "PDCAAS", "limiting AA", "cost KES/kg"]
 table = table[ing_cols + metric_cols]
 st.dataframe(table, width="stretch")
 
@@ -62,12 +67,12 @@ for col, (name, b) in zip(cols, zip(table.index, blends)):
 # ---------------- Trade-off curve ----------------
 st.subheader("Cost vs protein trade-off")
 targets = [round(8 + 0.5 * i, 1) for i in range(0, 35)]
-curve = tradeoff_curve(ing, ref, min_score, targets, excluded=excluded)
+curve = tradeoff_curve(ing, ref, min_score, targets, excluded=excluded, max_legume_share=max_legume)
 if not curve.empty:
     fig = px.line(curve, x="protein g/100g", y="cost KES/kg", markers=True,
                   hover_data=["AA score", "limiting AA"])
     fig.add_vline(x=min_protein, line_dash="dash")
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig)
     st.caption("Each point is the cheapest blend that reaches that protein level "
                f"with an amino-acid score of at least {min_score}.")
 
@@ -77,7 +82,8 @@ choice = st.selectbox("Blend", list(table.index))
 if st.button("Explain with AI"):
     from legumelab.bedrock import explain_blend
     idx = list(table.index).index(choice)
-    goal = f"protein >= {min_protein} g/100g, amino-acid score >= {min_score}, lowest cost"
+    goal = (f"protein >= {min_protein} g/100g, amino-acid score >= {min_score}, "
+            f"legumes <= {max_legume:.0%} of the blend, lowest cost")
     with st.spinner("Asking Bedrock..."):
         try:
             text = explain_blend(rows[idx], [r for j, r in enumerate(rows) if j != idx], goal)

@@ -45,5 +45,22 @@ Step 4 formula: mg per g protein = mg amino acid per 100 g food / g protein per 
 
 Differences above 30% are marked **check**. KFCT values are kept (hackathon-recommended, partly lab-measured for KFCT 2018); see the sensitivity test in DATA_SOURCES.md.
 
-## Step 7 - Output
-Wrote `data\ingredients.csv` with 8 ingredients. Digestibility values are ASSUMED; prices marked PLACEHOLDER still need to be collected.
+## Step 7 - Prices from FAOSTAT producer prices
+
+Source: FAOSTAT, Producer Prices domain, Kenya, element Producer Price (LCU/tonne), annual values, file `data\raw\FAOSTAT_producer_prices_Kenya_2020-2024.csv`. LCU for Kenya = KES. Years where all 8 crops have a price: [2022, 2023, 2024]. Price used = mean of [2022, 2023, 2024], divided by 1000 (tonne -> kg) and by the conversion factor.
+
+| Ingredient | FAOSTAT item | 2020 | 2021 | 2022 | 2023 | 2024 (KES/tonne) | Mean used | Factor | **KES/kg** | Retail cross-check (REACH) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| maize_flour | Maize (corn) | 31,000 | 30,027 | 53,010 | 61,167 | 62,812 | 58,996 | 1.0 | **59.0** | 100 (x1.7) |
+| sorghum_flour | Sorghum | - | 31,679 | 49,823 | 48,260 | 79,753 | 59,279 | 1.0 | **59.3** | - |
+| bulrush_millet_flour | Millet | 43,900 | 65,933 | 79,046 | 65,696 | 97,303 | 80,682 | 1.0 | **80.7** | - |
+| common_bean | Beans, dry | 67,000 | 42,158 | 101,046 | 102,326 | 94,130 | 99,167 | 1.0 | **99.2** | 140 (x1.4) |
+| cowpea | Cow peas, dry | 58,542 | 31,887 | 39,790 | 54,131 | 55,222 | 49,714 | 1.0 | **49.7** | 130 (x2.6) |
+| pigeon_pea | Pigeon peas, dry | 57,460 | 57,760 | 78,161 | 63,708 | 36,499 | 59,456 | 1.0 | **59.5** | 120 (x2.0) |
+| groundnut | Groundnuts, excluding shelled | 106,200 | 119,600 | 124,517 | 134,018 | 181,660 | 146,732 | 0.7 | **209.6** | - |
+| soybean | Soya beans | - | - | 74,726 | 72,087 | 66,326 | 71,046 | 1.0 | **71.0** | - |
+
+Producer (farm-gate) prices are lower than shop prices: the REACH column shows retail as a multiple of the FAOSTAT price. All 8 ingredients use the same basis, so the comparison between them is fair. Our user is a miller who buys grain, so farm-gate prices are the starting point for raw-material cost; the app lets the user type in their own prices.
+
+## Step 8 - Output
+Wrote `data\ingredients.csv` with 8 ingredients. Digestibility values are ASSUMED (see DATA_SOURCES.md).

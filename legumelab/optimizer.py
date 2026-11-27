@@ -81,6 +81,7 @@ def cheapest_blend(
     max_share: dict[str, float] | None = None,
     min_share: dict[str, float] | None = None,
     excluded: list[str] | None = None,
+    max_legume_share: float | None = None,
 ) -> Blend | None:
     """Cheapest blend meeting the protein and amino-acid-score targets.
 
@@ -100,6 +101,11 @@ def cheapest_blend(
         aa = ing[f"{a}_mg_per_g_protein"].to_numpy()
         A_ub.append(-(p * (aa - min_score * ref[a])))
         b_ub.append(0.0)
+
+    # product-design limit: legumes at most this share of the blend (taste, texture, cooking)
+    if max_legume_share is not None:
+        A_ub.append((ing["group"] == "legume").to_numpy(dtype=float))
+        b_ub.append(max_legume_share)
 
     bounds = []
     for name in names:
@@ -170,5 +176,5 @@ def top_distinct_blends(
 
 if __name__ == "__main__":
     ing, ref = load_data()
-    for b in top_distinct_blends(ing, ref, min_protein=15, min_score=0.9):
+    for b in top_distinct_blends(ing, ref, min_protein=15, min_score=0.9, max_legume_share=0.4):
         print(b.as_row())

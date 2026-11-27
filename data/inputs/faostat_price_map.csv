@@ -1,0 +1,9 @@
+ingredient,faostat_item,factor,factor_note
+maize_flour,Maize (corn),1.0,grain price; the miller mills it
+sorghum_flour,Sorghum,1.0,grain price; the miller mills it
+bulrush_millet_flour,Millet,1.0,grain price; the miller mills it
+common_bean,"Beans, dry",1.0,
+cowpea,"Cow peas, dry",1.0,
+pigeon_pea,"Pigeon peas, dry",1.0,
+groundnut,"Groundnuts, excluding shelled",0.70,"FAOSTAT price is for groundnuts in the shell; divided by an ASSUMED 70% kernel out-turn to get the price per kg of kernels"
+soybean,Soya beans,1.0,

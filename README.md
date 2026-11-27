@@ -109,5 +109,4 @@ The optimiser reads `data/ingredients.csv`. It is built from the raw Kenya Food 
 ```bash
 python data/build_ingredients.py      # Windows: python data\build_ingredients.py
 ```
-This rewrites `data/ingredients.csv` and `data/cleaning_report.md`. To change a price, edit
-`data/inputs/prices.csv` and rerun; to use a different KFCT item, edit `data/inputs/ingredient_map.csv`.
+This rewrites `data/ingredients.csv` and `data/cleaning_report.md`. Prices come from the raw FAOSTAT file in `data/raw/`; to use newer FAOSTAT data, replace that file and rerun; to use a different KFCT item, edit `data/inputs/ingredient_map.csv`.
