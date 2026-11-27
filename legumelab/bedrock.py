@@ -50,7 +50,8 @@ SYSTEM_PROMPT = (
     "You explain blends computed by an optimiser. Use ONLY the numbers given to you; "
     "never invent nutrition values. Be concise and practical. "
     "Write a short explanation of WHY the chosen blend works: how its ingredients complement "
-    "each other's amino acids, and why it is the cheapest option. 2 to 4 sentences, at most "
+    "each other's amino acids, and how its cost compares with the other blends (use the cost "
+    "ranking stated in the facts). 2 to 4 sentences, at most "
     "80 words, no headings and no lists. The exact numbers are already shown to the user, so "
     "use at most two numbers, copied exactly. State facts directly; never mention a 'fact "
     "sheet'. Do NOT give processing steps: the app shows those separately, from cited documents. "
@@ -86,6 +87,14 @@ def unsupported_terms(text: str) -> list[str]:
     return [t for t in UNSUPPORTED if re.search(r"\b" + t, low)]
 
 
+def false_cheapest_claim(text: str, blend_row: dict, alternatives: list[dict]) -> bool:
+    """True if the text calls the chosen blend the cheapest when another blend costs less."""
+    cheaper_exists = any(a["cost KES/kg"] < blend_row["cost KES/kg"] for a in alternatives)
+    claims = re.search(r"\b(cheapest|lowest[- ]cost|least expensive)\s+(blend|option|combination|"
+                       r"choice|mix|recipe)", text, re.I)
+    return bool(cheaper_exists and claims)
+
+
 def tidy_headings(text: str) -> str:
     """Streamlit renders # and ## very large; demote them to ####."""
     return re.sub(r"^#{1,3} ", "#### ", text, flags=re.M)
@@ -104,10 +113,22 @@ def fact_sheet(blend_row: dict, alternatives: list[dict], user_goal: str,
                 f"{r['protein g/100g']:g} g protein per 100 g, an amino-acid score of "
                 f"{r['AA score']:g}, a PDCAAS of {r['PDCAAS']:g}, and its limiting amino acid "
                 f"is {r['limiting AA']}.")
+    costs = sorted([blend_row["cost KES/kg"]] + [a["cost KES/kg"] for a in alternatives])
+    rank = costs.index(blend_row["cost KES/kg"])
+    n_blends = len(costs)
+    if n_blends == 1:
+        rank_txt = "The chosen blend is the only blend that meets every target."
+    elif rank == 0:
+        rank_txt = f"The chosen blend is the cheapest of the {n_blends} blends."
+    elif rank == n_blends - 1:
+        rank_txt = f"The chosen blend is the most expensive of the {n_blends} blends; it is not the cheapest."
+    else:
+        rank_txt = (f"The chosen blend is number {rank + 1} of {n_blends} by cost (1 = cheapest); "
+                    "it is not the cheapest.")
     lines = [f"The user's targets are: {user_goal}.",
              "The optimiser found the cheapest blends that meet every target. "
              "Every blend listed below meets every target and constraint.",
-             describe("The chosen blend", blend_row)]
+             describe("The chosen blend", blend_row), rank_txt]
     for i, alt in enumerate(alternatives, 1):
         diff = alt["cost KES/kg"] - blend_row["cost KES/kg"]
         lines.append(describe(f"Alternative blend {i}", alt) +
@@ -266,7 +287,10 @@ def explain_blend(blend_row: dict, alternatives: list[dict], user_goal: str,
     """
     facts = fact_sheet(blend_row, alternatives, user_goal, roles)
     text, bad, grounding = _explain_cached(facts, "Explain why this blend was chosen: " + user_goal)
-    return text, list(bad), grounding
+    bad = list(bad)
+    if false_cheapest_claim(text, blend_row, alternatives):
+        bad.append("calls this blend the cheapest, but another blend costs less")
+    return text, bad, grounding
 
 @lru_cache(maxsize=1)
 def _account_id() -> str:
