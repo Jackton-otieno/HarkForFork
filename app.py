@@ -6,7 +6,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from legumelab.optimizer import load_data, top_distinct_blends, tradeoff_curve
+from legumelab.optimizer import ingredient_roles, load_data, top_distinct_blends, tradeoff_curve
 
 st.set_page_config(page_title="LegumeLab", page_icon="🌱", layout="wide")
 st.title("🌱 LegumeLab")
@@ -34,7 +34,8 @@ max_legume = st.sidebar.slider(
          "set it from your own kitchen trials.") / 100
 min_used = st.sidebar.slider(
     "Minimum share of any ingredient used (%)", 0, 30, 10, 5,
-    help="Every ingredient in a blend is either left out or at least this share. 0 = no rule.") / 100
+    help="Every ingredient in a blend is either left out or at least this share, "
+         "so there are no impractical 1% additions. 0 = no rule.") / 100
 
 st.sidebar.header("Market prices (KES/kg)")
 st.sidebar.caption("Change a price and the recommendation updates.")
@@ -90,10 +91,17 @@ if st.button("Explain with AI"):
             f"legumes <= {max_legume:.0%} of the blend, lowest cost")
     with st.spinner("Asking Bedrock..."):
         try:
-            text = explain_blend(rows[idx], [r for j, r in enumerate(rows) if j != idx], goal)
+            roles = ingredient_roles(blends[idx], ing)
+            text, bad = explain_blend(rows[idx], [r for j, r in enumerate(rows) if j != idx],
+                                      goal, roles)
             st.markdown(text)
+            if bad:
+                st.warning("The explanation mentions topics we have no data on ("
+                           + ", ".join(bad) + "). Treat those statements as unverified.")
             st.caption("Model-generated explanation. Numbers come from the optimiser; "
                        "processing steps must be validated in a kitchen trial.")
+            with st.expander("Data the model was given about each ingredient"):
+                st.dataframe(pd.DataFrame(roles), width="stretch")
         except Exception as e:  # show the error instead of crashing the demo
             st.error(f"Bedrock call failed: {e}")
 

@@ -86,6 +86,10 @@ def cheapest_blend(
 ) -> Blend | None:
     """Cheapest blend meeting the protein and amino-acid-score targets.
 
+    min_used_share: if > 0, every ingredient is either left out or makes up at least this
+    share of the blend (no impractical 1% additions). This needs a yes/no choice per
+    ingredient, so it is solved as a mixed-integer program (scipy milp, HiGHS).
+
     Returns None if no blend can meet the targets.
     """
     n = len(ing)
@@ -116,44 +120,45 @@ def cheapest_blend(
             lo, hi = 0.0, 0.0
         bounds.append((lo, hi))
 
-    if min_used_share > 0:
-        # mixed-integer program: shares x_1..x_n plus binaries y_1..y_n (y_i = 1 if ingredient i is used)
-        A = np.array(A_ub)
-        zeros = np.zeros((A.shape[0], n))
-        eye = np.eye(n)
-        constraints = [
-            LinearConstraint(np.hstack([A, zeros]), -np.inf, np.array(b_ub)),
-            LinearConstraint(np.hstack([np.ones((1, n)), np.zeros((1, n))]), 1.0, 1.0),
-            # x_i - y_i <= 0: an ingredient can only be used if y_i = 1
-            LinearConstraint(np.hstack([eye, -eye]), -np.inf, 0.0),
-            # min_used_share * y_i - x_i <= 0: if used, at least min_used_share
-            LinearConstraint(np.hstack([-eye, min_used_share * eye]), -np.inf, 0.0),
-        ]
-        lb = np.concatenate([[lo for lo, _ in bounds], np.zeros(n)])
-        ub = np.concatenate([[hi for _, hi in bounds], np.ones(n)])
-        res = milp(
-            c=np.concatenate([cost, np.zeros(n)]),
-            constraints=constraints,
-            integrality=np.concatenate([np.zeros(n), np.ones(n)]),
-            bounds=Bounds(lb, ub),
+    if min_used_share <= 0:
+        res = linprog(
+            c=cost,
+            A_ub=np.array(A_ub),
+            b_ub=np.array(b_ub),
+            A_eq=np.ones((1, n)),
+            b_eq=[1.0],
+            bounds=bounds,
+            method="highs",
         )
         if not res.success:
             return None
-        x = np.clip(res.x[:n], 0, None)
+        x = np.clip(res.x, 0, None)
         return evaluate(x / x.sum(), ing, ref)
 
-    res = linprog(
-        c=cost,
-        A_ub=np.array(A_ub),
-        b_ub=np.array(b_ub),
-        A_eq=np.ones((1, n)),
-        b_eq=[1.0],
-        bounds=bounds,
-        method="highs",
+    # Mixed-integer version: variables [x_1..x_n, y_1..y_n], y_i = 1 if ingredient i is used.
+    #   x_i - y_i <= 0                  (unused ingredient -> share 0)
+    #   min_used_share * y_i - x_i <= 0 (used ingredient -> share >= min_used_share)
+    eye = np.eye(n)
+    A = np.vstack([
+        np.hstack([np.array(A_ub), np.zeros((len(A_ub), n))]),   # protein, amino acids, legume cap
+        np.hstack([eye, -eye]),
+        np.hstack([-eye, min_used_share * eye]),
+        np.hstack([np.ones((1, n)), np.zeros((1, n))]),          # shares sum to 1
+    ])
+    lower = np.concatenate([np.full(len(A_ub) + 2 * n, -np.inf), [1.0]])
+    upper = np.concatenate([b_ub, np.zeros(2 * n), [1.0]])
+    lo_x = [b[0] for b in bounds]
+    hi_x = [b[1] for b in bounds]
+    res = milp(
+        c=np.concatenate([cost, np.zeros(n)]),
+        constraints=LinearConstraint(A, lower, upper),
+        integrality=np.concatenate([np.zeros(n), np.ones(n)]),
+        bounds=Bounds(np.concatenate([lo_x, np.zeros(n)]), np.concatenate([hi_x, np.ones(n)])),
     )
     if not res.success:
         return None
-    x = np.clip(res.x, 0, None)
+    x = np.clip(res.x[:n], 0, None)
+    x[x < 1e-9] = 0.0
     return evaluate(x / x.sum(), ing, ref)
 
 
@@ -201,8 +206,33 @@ def top_distinct_blends(
     return blends
 
 
+def ingredient_roles(blend: Blend, ing: pd.DataFrame) -> list[dict]:
+    """What each ingredient contributes to a blend, so an explanation can be grounded in facts.
+
+    For each ingredient used: its share of the blend, its own protein and price, and the share of
+    the blend's protein, lysine and sulphur amino acids (SAA) that it supplies.
+    """
+    rows = ing.set_index("ingredient")
+    used = {n: x for n, x in blend.fractions.items() if x > 0.001}
+    prot = {n: x * rows.at[n, "protein_g_per_100g"] for n, x in used.items()}
+    lys = {n: prot[n] * rows.at[n, "lysine_mg_per_g_protein"] for n in used}
+    saa = {n: prot[n] * rows.at[n, "saa_mg_per_g_protein"] for n in used}
+    out = []
+    for n, x in used.items():
+        out.append({
+            "ingredient": n,
+            "share_of_blend_pct": round(float(x) * 100, 1),
+            "own_protein_g_per_100g": float(rows.at[n, "protein_g_per_100g"]),
+            "own_price_kes_per_kg": round(float(rows.at[n, "price_kes_per_kg"]), 1),
+            "supplies_pct_of_blend_protein": round(float(100 * prot[n] / sum(prot.values())), 1),
+            "supplies_pct_of_blend_lysine": round(float(100 * lys[n] / sum(lys.values())), 1),
+            "supplies_pct_of_blend_saa": round(float(100 * saa[n] / sum(saa.values())), 1),
+        })
+    return out
+
+
 if __name__ == "__main__":
     ing, ref = load_data()
     for b in top_distinct_blends(ing, ref, min_protein=15, min_score=0.9, max_legume_share=0.4,
-                                 min_used_share=0.1):
+                                  min_used_share=0.1):
         print(b.as_row())
