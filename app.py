@@ -6,13 +6,15 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from legumelab.optimizer import ingredient_roles, load_data, top_distinct_blends, tradeoff_curve
+from legumelab.optimizer import (data_location, ingredient_roles, load_data, top_distinct_blends,
+                                 tradeoff_curve)
 
 st.set_page_config(page_title="LegumeLab", page_icon="🌱", layout="wide")
 st.title("🌱 LegumeLab")
 st.caption("Find the best local legume + cereal blend for a protein flour - before the kitchen trial.")
 
 ing, ref = load_data()
+st.caption(f"Data loaded from {data_location()}")
 
 _src_cols = [c for c in ("source", "aa_source", "price_source") if c in ing.columns]
 _placeholder = ing[_src_cols].apply(lambda col: col.str.upper().str.startswith("PLACEHOLDER")).any(axis=1)
@@ -92,9 +94,18 @@ if st.button("Explain with AI"):
     with st.spinner("Asking Bedrock..."):
         try:
             roles = ingredient_roles(blends[idx], ing)
-            text, bad = explain_blend(rows[idx], [r for j, r in enumerate(rows) if j != idx],
-                                      goal, roles)
+            text, bad, grounding = explain_blend(rows[idx], [r for j, r in enumerate(rows) if j != idx],
+                                                 goal, roles)
             st.markdown(text)
+            for kind, score, threshold, passed in grounding:
+                if kind.startswith("error"):
+                    st.caption(f"Grounding check unavailable ({kind}).")
+                elif passed:
+                    st.success(f"Amazon Bedrock Guardrails {kind} score {score:.2f} "
+                               f"(threshold {threshold:.2f}): supported by the data given to the model.")
+                else:
+                    st.warning(f"Amazon Bedrock Guardrails {kind} score {score:.2f} is below the "
+                               f"threshold {threshold:.2f}: treat this explanation as unverified.")
             if bad:
                 st.warning("The explanation mentions topics we have no data on ("
                            + ", ".join(bad) + "). Treat those statements as unverified.")

@@ -12,7 +12,10 @@ Sweeping s and the protein target gives the cost / quality trade-off curve.
 """
 from __future__ import annotations
 
+import io
+import os
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -23,10 +26,44 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 AMINO_ACIDS = ["lysine", "saa", "threonine", "tryptophan"]
 
 
+# The cleaned data is stored in Amazon S3; the local data/ folder is the fallback (e.g. offline).
+DATA_BUCKET = os.environ.get("LEGUMELAB_DATA_BUCKET", "legumelab-data-jackton")
+_location = "local data/ folder"
+
+
+@lru_cache(maxsize=1)
+def _read_from_s3() -> tuple[str, str] | None:
+    """Return (ingredients.csv text, reference_pattern.csv text) from S3, or None if unavailable."""
+    if os.environ.get("LEGUMELAB_DATA_SOURCE", "s3") == "local":
+        return None
+    try:
+        import boto3
+        from botocore.config import Config
+        s3 = boto3.client("s3", region_name="us-east-1",
+                          config=Config(connect_timeout=3, read_timeout=5, retries={"max_attempts": 1}))
+        get = lambda key: s3.get_object(Bucket=DATA_BUCKET, Key=key)["Body"].read().decode("utf-8")
+        return get("ingredients.csv"), get("reference_pattern.csv")
+    except Exception:  # no credentials, no bucket, no network -> use local files
+        return None
+
+
 def load_data() -> tuple[pd.DataFrame, pd.Series]:
-    ing = pd.read_csv(DATA_DIR / "ingredients.csv")
-    ref = pd.read_csv(DATA_DIR / "reference_pattern.csv").set_index("amino_acid")["mg_per_g_protein"]
+    global _location
+    texts = _read_from_s3()
+    if texts:
+        ing_src, ref_src = io.StringIO(texts[0]), io.StringIO(texts[1])
+        _location = f"Amazon S3 (s3://{DATA_BUCKET}/)"
+    else:
+        ing_src, ref_src = DATA_DIR / "ingredients.csv", DATA_DIR / "reference_pattern.csv"
+        _location = "local data/ folder"
+    ing = pd.read_csv(ing_src)
+    ref = pd.read_csv(ref_src).set_index("amino_acid")["mg_per_g_protein"]
     return ing, ref
+
+
+def data_location() -> str:
+    """Where the last load_data() call read the data from."""
+    return _location
 
 
 @dataclass
@@ -236,4 +273,3 @@ if __name__ == "__main__":
     for b in top_distinct_blends(ing, ref, min_protein=15, min_score=0.9, max_legume_share=0.4,
                                   min_used_share=0.1):
         print(b.as_row())
- 

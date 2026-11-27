@@ -20,6 +20,8 @@ REGION = "us-east-1"
 # Copy the exact model / inference-profile ID from the Bedrock console
 # (Model catalog -> model -> "Model ID" or Cross-region inference -> "Inference profile ID").
 MODEL_ID = os.environ.get("LEGUMELAB_MODEL_ID", "PASTE_MODEL_ID_HERE")
+GUARDRAIL_ID = os.environ.get("LEGUMELAB_GUARDRAIL_ID", "")  # legumelab-grounding guardrail
+GUARDRAIL_VERSION = os.environ.get("LEGUMELAB_GUARDRAIL_VERSION", "DRAFT")
 KB_ID = os.environ.get("LEGUMELAB_KB_ID", "LNZHEFARUI")  # legumelab-processing-kb (us-east-1)
 
 _last_call = 0.0
@@ -105,11 +107,40 @@ def _explain_cached(payload: str) -> tuple[str, tuple[str, ...]]:
     return tidy_headings(text), tuple(bad)
 
 
+@lru_cache(maxsize=128)
+def grounding_check(source: str, query: str, answer: str) -> tuple[tuple[str, float, float, bool], ...]:
+    """Amazon Bedrock Guardrails contextual grounding check.
+
+    Scores how well `answer` is supported by `source` (grounding) and answers `query` (relevance).
+    Returns ((type, score, threshold, passed), ...); empty if no guardrail is configured.
+    """
+    if not GUARDRAIL_ID:
+        return ()
+    _rate_limit()
+    resp = _runtime().apply_guardrail(
+        guardrailIdentifier=GUARDRAIL_ID,
+        guardrailVersion=GUARDRAIL_VERSION,
+        source="OUTPUT",
+        content=[
+            {"text": {"text": source, "qualifiers": ["grounding_source"]}},
+            {"text": {"text": query, "qualifiers": ["query"]}},
+            {"text": {"text": answer, "qualifiers": ["guard_content"]}},
+        ],
+    )
+    out = []
+    for a in resp.get("assessments", []):
+        for f in a.get("contextualGroundingPolicy", {}).get("filters", []):
+            out.append((f["type"].lower(), float(f["score"]), float(f["threshold"]),
+                        f.get("action") != "BLOCKED"))
+    return tuple(out)
+
+
 def explain_blend(blend_row: dict, alternatives: list[dict], user_goal: str,
-                  roles: list[dict] | None = None) -> tuple[str, list[str]]:
+                  roles: list[dict] | None = None) -> tuple[str, list[str], tuple]:
     """Plain-language explanation of a blend.
 
-    Returns (markdown text, list of unsupported topics the model still mentioned).
+    Returns (markdown text, unsupported topics the model still mentioned,
+             Guardrails grounding results - empty if no guardrail is configured).
     """
     payload = json.dumps(
         {"user_goal": user_goal, "chosen_blend": blend_row, "ingredient_roles": roles or [],
@@ -117,7 +148,11 @@ def explain_blend(blend_row: dict, alternatives: list[dict], user_goal: str,
         sort_keys=True,
     )
     text, bad = _explain_cached(payload)  # cached: same input -> no second model call
-    return text, list(bad)
+    try:
+        grounding = grounding_check(payload, "Explain this blend: " + user_goal, text)
+    except Exception as e:  # the explanation still shows if the guardrail call fails
+        grounding = (("error: " + str(e)[:120], 0.0, 0.0, True),)
+    return text, list(bad), grounding
 
 
 @lru_cache(maxsize=1)
