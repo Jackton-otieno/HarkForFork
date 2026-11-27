@@ -107,6 +107,7 @@ if st.button("Explain with AI"):
                     st.markdown(text)
             else:
                 st.markdown(text)
+                st.caption("Model-generated explanation. Every number comes from the optimiser.")
             if bad:
                 st.warning("The explanation mentions topics we have no data on ("
                            + ", ".join(bad) + "). Treat those statements as unverified.")
@@ -119,7 +120,6 @@ if st.button("Explain with AI"):
                 else:
                     st.warning(f"Amazon Bedrock Guardrails {kind} score {score:.2f} is below the "
                                f"threshold {threshold:.2f}.")
-            st.caption("Model-generated explanation. Every number comes from the optimiser.")
             with st.expander("Data the model was given about each ingredient"):
                 st.dataframe(pd.DataFrame(roles), width="stretch")
         except Exception as e:  # show the error instead of crashing the demo

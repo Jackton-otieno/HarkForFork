@@ -64,6 +64,16 @@ SYSTEM_PROMPT = (
     "meets every constraint; never say a blend breaks a constraint."
 )
 
+def _load_reference() -> dict:
+    try:
+        from legumelab.optimizer import load_data
+        return {k: float(v) for k, v in load_data()[1].items()}
+    except Exception:
+        return {}
+
+
+REFERENCE = _load_reference()  # mg per g protein, FAO/WHO/UNU 2007 adult pattern
+
 # Topics we have no data on; if the model mentions one, we ask it once to rewrite.
 UNSUPPORTED = ["mineral", "vitamin", "iron", "zinc", "fibre", "fiber", "carbohydrate", "energy",
                "calorie", "shelf", "taste", "flavour", "flavor", "texture", "colour", "color",
@@ -112,6 +122,18 @@ def fact_sheet(blend_row: dict, alternatives: list[dict], user_goal: str,
             f"{r['supplies_pct_of_blend_saa']:g}% of its sulphur amino acids (SAA). "
             f"{n.capitalize()} has {r['own_protein_g_per_100g']:g} g protein per 100 g and costs "
             f"{r['own_price_kes_per_kg']:g} KES per kg.")
+        if "own_lysine_mg_per_g_protein" in r and REFERENCE:
+            lys, saa = r["own_lysine_mg_per_g_protein"], r["own_saa_mg_per_g_protein"]
+            lines.append(
+                f"{n.capitalize()} protein contains {lys:g} mg lysine per g protein, which is "
+                f"{'above' if lys >= REFERENCE['lysine'] else 'below'} the reference of "
+                f"{REFERENCE['lysine']:g} mg, and {saa:g} mg sulphur amino acids per g protein, which is "
+                f"{'above' if saa >= REFERENCE['saa'] else 'below'} the reference of {REFERENCE['saa']:g} mg. "
+                f"So {n} is {'rich' if lys >= REFERENCE['lysine'] else 'low'} in lysine.")
+    if REFERENCE:
+        lines.append("Mixing ingredients that are low in lysine with ingredients rich in lysine "
+                     "raises the blend's amino-acid score; the blend's score is set by the amino "
+                     "acid that is furthest below the reference.")
     lines.append("SAA means methionine plus cysteine. PDCAAS is protein quality corrected for "
                  "digestibility; 1.0 is the maximum.")
     return "\n".join(lines)

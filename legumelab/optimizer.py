@@ -261,6 +261,8 @@ def ingredient_roles(blend: Blend, ing: pd.DataFrame) -> list[dict]:
             "share_of_blend_pct": round(float(x) * 100, 1),
             "own_protein_g_per_100g": float(rows.at[n, "protein_g_per_100g"]),
             "own_price_kes_per_kg": round(float(rows.at[n, "price_kes_per_kg"]), 1),
+            "own_lysine_mg_per_g_protein": float(rows.at[n, "lysine_mg_per_g_protein"]),
+            "own_saa_mg_per_g_protein": float(rows.at[n, "saa_mg_per_g_protein"]),
             "supplies_pct_of_blend_protein": round(float(100 * prot[n] / sum(prot.values())), 1),
             "supplies_pct_of_blend_lysine": round(float(100 * lys[n] / sum(lys.values())), 1),
             "supplies_pct_of_blend_saa": round(float(100 * saa[n] / sum(saa.values())), 1),
