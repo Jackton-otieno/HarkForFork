@@ -236,3 +236,4 @@ if __name__ == "__main__":
     for b in top_distinct_blends(ing, ref, min_protein=15, min_score=0.9, max_legume_share=0.4,
                                   min_used_share=0.1):
         print(b.as_row())
+ 

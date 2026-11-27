@@ -20,7 +20,7 @@ REGION = "us-east-1"
 # Copy the exact model / inference-profile ID from the Bedrock console
 # (Model catalog -> model -> "Model ID" or Cross-region inference -> "Inference profile ID").
 MODEL_ID = os.environ.get("LEGUMELAB_MODEL_ID", "PASTE_MODEL_ID_HERE")
-KB_ID = os.environ.get("LEGUMELAB_KB_ID", "")  # set after you create the Knowledge Base
+KB_ID = os.environ.get("LEGUMELAB_KB_ID", "LNZHEFARUI")  # legumelab-processing-kb (us-east-1)
 
 _last_call = 0.0
 
@@ -48,10 +48,9 @@ SYSTEM_PROMPT = (
     "You are a food-formulation assistant for a small Kenyan flour/porridge company. "
     "You explain blends computed by an optimiser. Use ONLY the numbers given to you; "
     "never invent nutrition values. Be concise and practical. "
-    "Explain: why these ingredients complement each other (amino acids), the trade-off "
-    "versus the other blends, and 3-5 processing steps suited to a small Kenyan mill "
-    "(cleaning, roasting/soaking, milling, sieving, packing). "
-    "Clearly mark processing advice as general guidance to be validated in a kitchen trial. "
+    "Explain: why these ingredients complement each other (amino acids) and the trade-off "
+    "versus the other blends. Do NOT give processing steps: the app shows processing "
+    "guidance separately, from cited documents. "
     "Format: no headings larger than ###, at most 250 words. "
     "Never claim effects (e.g. of processing on digestibility) that are not in the numbers you were given. "
     "Compare blends ONLY on the fields provided (shares, protein, AA score, PDCAAS, limiting AA, cost). "
@@ -121,28 +120,55 @@ def explain_blend(blend_row: dict, alternatives: list[dict], user_goal: str,
     return text, list(bad)
 
 
-def ask_knowledge_base(question: str) -> tuple[str, list[str]]:
-    """Grounded answer from your Knowledge Base (processing guides, standards).
+@lru_cache(maxsize=1)
+def _account_id() -> str:
+    return boto3.client("sts", region_name=REGION).get_caller_identity()["Account"]
 
-    Returns (answer, list of source document URIs).
+
+def _model_arn() -> str:
+    """Knowledge Bases need a full ARN. Inference profiles (us., global.) have their own ARN form."""
+    if MODEL_ID.startswith("arn:"):
+        return MODEL_ID
+    if MODEL_ID.split(".")[0] in ("us", "global", "eu", "apac"):
+        return f"arn:aws:bedrock:{REGION}:{_account_id()}:inference-profile/{MODEL_ID}"
+    return f"arn:aws:bedrock:{REGION}::foundation-model/{MODEL_ID}"
+
+
+@lru_cache(maxsize=64)
+def ask_knowledge_base(question: str) -> tuple[str, tuple[tuple[str, str], ...]]:
+    """Grounded answer from the Bedrock Knowledge Base (processing documents in S3).
+
+    Returns (answer, sources) where each source is (file name, short excerpt it was based on).
+    Cached: the same question does not call Bedrock twice.
     """
     if not KB_ID:
-        return "Knowledge Base not configured yet (set LEGUMELAB_KB_ID).", []
+        return "Knowledge Base not configured (set LEGUMELAB_KB_ID).", ()
     _rate_limit()
-    model_arn = MODEL_ID if MODEL_ID.startswith("arn:") else (
-        f"arn:aws:bedrock:{REGION}::foundation-model/{MODEL_ID}"
-    )
     resp = _agent_runtime().retrieve_and_generate(
         input={"text": question},
         retrieveAndGenerateConfiguration={
             "type": "KNOWLEDGE_BASE",
-            "knowledgeBaseConfiguration": {"knowledgeBaseId": KB_ID, "modelArn": model_arn},
+            "knowledgeBaseConfiguration": {"knowledgeBaseId": KB_ID, "modelArn": _model_arn()},
         },
     )
-    sources = []
+    sources, seen = [], set()
     for c in resp.get("citations", []):
         for ref in c.get("retrievedReferences", []):
-            uri = ref.get("location", {}).get("s3Location", {}).get("uri")
-            if uri and uri not in sources:
-                sources.append(uri)
-    return resp["output"]["text"], sources
+            uri = ref.get("location", {}).get("s3Location", {}).get("uri", "")
+            excerpt = " ".join(ref.get("content", {}).get("text", "").split())[:320]
+            key = (uri, excerpt[:80])
+            if uri and key not in seen:
+                seen.add(key)
+                sources.append((uri.rsplit("/", 1)[-1], excerpt))
+    return resp["output"]["text"], tuple(sources)
+
+
+def processing_question(ingredient_names: list[str]) -> str:
+    return (
+        "A small mill in Kenya makes a porridge flour from " + ", ".join(ingredient_names) + ". "
+        "Using only the documents, how should these grains and legumes be prepared before and "
+        "during milling (for example cleaning, soaking, dehulling, roasting, germination, milling), "
+        "and why does each step matter for protein quality or anti-nutritional factors? "
+        "Answer as 4 to 6 short numbered steps, under 200 words. If the documents do not cover "
+        "an ingredient, say so."
+    )

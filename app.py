@@ -98,12 +98,34 @@ if st.button("Explain with AI"):
             if bad:
                 st.warning("The explanation mentions topics we have no data on ("
                            + ", ".join(bad) + "). Treat those statements as unverified.")
-            st.caption("Model-generated explanation. Numbers come from the optimiser; "
-                       "processing steps must be validated in a kitchen trial.")
+            st.caption("Model-generated explanation. Every number comes from the optimiser.")
             with st.expander("Data the model was given about each ingredient"):
                 st.dataframe(pd.DataFrame(roles), width="stretch")
         except Exception as e:  # show the error instead of crashing the demo
             st.error(f"Bedrock call failed: {e}")
+
+st.subheader("Processing guidance from sources")
+st.caption("Answered by Claude from documents in our Amazon Bedrock Knowledge Base "
+           "(open-licence processing papers stored in Amazon S3), with citations.")
+if st.button("Get cited processing guidance"):
+    from legumelab.bedrock import ask_knowledge_base, processing_question
+    kidx = list(table.index).index(choice)
+    used = [n for n, x in blends[kidx].fractions.items() if x > 0.001]
+    with st.spinner("Searching the processing documents..."):
+        try:
+            answer, sources = ask_knowledge_base(processing_question(
+                [n.replace("_", " ") for n in used]))
+            st.markdown(answer)
+            if sources:
+                st.markdown("**Sources**")
+                for fname, excerpt in sources:
+                    with st.expander(fname):
+                        st.write(excerpt + " ...")
+            else:
+                st.warning("No citations were returned, so treat this answer as unverified.")
+            st.caption("General guidance from the cited documents; validate in a kitchen trial.")
+        except Exception as e:  # show the error instead of crashing the demo
+            st.error(f"Knowledge Base call failed: {e}")
 
 with st.expander("Data provenance"):
     st.dataframe(ing[["ingredient"] + _src_cols], width="stretch")
