@@ -17,7 +17,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from scipy.optimize import linprog
+from scipy.optimize import Bounds, LinearConstraint, linprog, milp
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 AMINO_ACIDS = ["lysine", "saa", "threonine", "tryptophan"]
@@ -82,6 +82,7 @@ def cheapest_blend(
     min_share: dict[str, float] | None = None,
     excluded: list[str] | None = None,
     max_legume_share: float | None = None,
+    min_used_share: float = 0.0,
 ) -> Blend | None:
     """Cheapest blend meeting the protein and amino-acid-score targets.
 
@@ -114,6 +115,32 @@ def cheapest_blend(
         if excluded and name in excluded:
             lo, hi = 0.0, 0.0
         bounds.append((lo, hi))
+
+    if min_used_share > 0:
+        # mixed-integer program: shares x_1..x_n plus binaries y_1..y_n (y_i = 1 if ingredient i is used)
+        A = np.array(A_ub)
+        zeros = np.zeros((A.shape[0], n))
+        eye = np.eye(n)
+        constraints = [
+            LinearConstraint(np.hstack([A, zeros]), -np.inf, np.array(b_ub)),
+            LinearConstraint(np.hstack([np.ones((1, n)), np.zeros((1, n))]), 1.0, 1.0),
+            # x_i - y_i <= 0: an ingredient can only be used if y_i = 1
+            LinearConstraint(np.hstack([eye, -eye]), -np.inf, 0.0),
+            # min_used_share * y_i - x_i <= 0: if used, at least min_used_share
+            LinearConstraint(np.hstack([-eye, min_used_share * eye]), -np.inf, 0.0),
+        ]
+        lb = np.concatenate([[lo for lo, _ in bounds], np.zeros(n)])
+        ub = np.concatenate([[hi for _, hi in bounds], np.ones(n)])
+        res = milp(
+            c=np.concatenate([cost, np.zeros(n)]),
+            constraints=constraints,
+            integrality=np.concatenate([np.zeros(n), np.ones(n)]),
+            bounds=Bounds(lb, ub),
+        )
+        if not res.success:
+            return None
+        x = np.clip(res.x[:n], 0, None)
+        return evaluate(x / x.sum(), ing, ref)
 
     res = linprog(
         c=cost,
@@ -176,5 +203,6 @@ def top_distinct_blends(
 
 if __name__ == "__main__":
     ing, ref = load_data()
-    for b in top_distinct_blends(ing, ref, min_protein=15, min_score=0.9, max_legume_share=0.4):
+    for b in top_distinct_blends(ing, ref, min_protein=15, min_score=0.9, max_legume_share=0.4,
+                                 min_used_share=0.1):
         print(b.as_row())

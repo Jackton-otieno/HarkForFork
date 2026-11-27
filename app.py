@@ -32,6 +32,9 @@ max_legume = st.sidebar.slider(
     "Maximum legume share (%)", 10, 100, 40, 5,
     help="Product-design limit for taste, texture and cooking. 40% is an assumed default; "
          "set it from your own kitchen trials.") / 100
+min_used = st.sidebar.slider(
+    "Minimum share of any ingredient used (%)", 0, 30, 10, 5,
+    help="Every ingredient in a blend is either left out or at least this share. 0 = no rule.") / 100
 
 st.sidebar.header("Market prices (KES/kg)")
 st.sidebar.caption("Change a price and the recommendation updates.")
@@ -42,7 +45,7 @@ for i, row in ing.iterrows():
 
 # ---------------- Recommended blends ----------------
 blends = top_distinct_blends(ing, ref, min_protein, min_score, k=3, excluded=excluded,
-                             max_legume_share=max_legume)
+                             max_legume_share=max_legume, min_used_share=min_used)
 
 if not blends:
     st.warning("No blend can meet these targets with the selected ingredients. "
@@ -67,7 +70,8 @@ for col, (name, b) in zip(cols, zip(table.index, blends)):
 # ---------------- Trade-off curve ----------------
 st.subheader("Cost vs protein trade-off")
 targets = [round(8 + 0.5 * i, 1) for i in range(0, 35)]
-curve = tradeoff_curve(ing, ref, min_score, targets, excluded=excluded, max_legume_share=max_legume)
+curve = tradeoff_curve(ing, ref, min_score, targets, excluded=excluded, max_legume_share=max_legume,
+                       min_used_share=min_used)
 if not curve.empty:
     fig = px.line(curve, x="protein g/100g", y="cost KES/kg", markers=True,
                   hover_data=["AA score", "limiting AA"])
