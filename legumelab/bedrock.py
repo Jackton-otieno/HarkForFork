@@ -117,6 +117,30 @@ def fact_sheet(blend_row: dict, alternatives: list[dict], user_goal: str,
     return "\n".join(lines)
 
 
+def verified_summary(blend_row: dict, alternatives: list[dict],
+                     roles: list[dict] | None = None) -> str:
+    """A summary written by code straight from the optimiser's numbers: correct by construction.
+    Shown instead of the AI text when that text fails the Guardrails grounding check."""
+    lines = [f"**Chosen blend:** {_pct(blend_row)}. **{blend_row['cost KES/kg']:g} KES/kg**, "
+             f"{blend_row['protein g/100g']:g} g protein per 100 g, amino-acid score "
+             f"{blend_row['AA score']:g}, PDCAAS {blend_row['PDCAAS']:g}, limiting amino acid: "
+             f"{blend_row['limiting AA']}.", ""]
+    for r in sorted(roles or [], key=lambda r: -r["supplies_pct_of_blend_protein"]):
+        lines.append(f"- **{r['ingredient'].replace('_', ' ').capitalize()}** "
+                     f"({r['share_of_blend_pct']:g}% of the blend, {r['own_price_kes_per_kg']:g} KES/kg) "
+                     f"supplies {r['supplies_pct_of_blend_protein']:g}% of the protein, "
+                     f"{r['supplies_pct_of_blend_lysine']:g}% of the lysine and "
+                     f"{r['supplies_pct_of_blend_saa']:g}% of the sulphur amino acids.")
+    if alternatives:
+        lines.append("")
+        for i, a in enumerate(alternatives, 1):
+            diff = a["cost KES/kg"] - blend_row["cost KES/kg"]
+            cmp = f"{abs(diff):g} KES/kg {'more' if diff > 0 else 'less'}" if diff else "the same cost"
+            lines.append(f"- **Alternative {i}** ({_pct(a)}): {cmp}; {a['protein g/100g']:g} g protein, "
+                         f"PDCAAS {a['PDCAAS']:g}.")
+    return "\n".join(lines)
+
+
 def _converse(messages: list[dict]) -> str:
     _rate_limit()
     resp = _runtime().converse(

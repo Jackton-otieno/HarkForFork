@@ -96,7 +96,20 @@ if st.button("Explain with AI"):
             roles = ingredient_roles(blends[idx], ing)
             text, bad, grounding = explain_blend(rows[idx], [r for j, r in enumerate(rows) if j != idx],
                                                  goal, roles)
-            st.markdown(text)
+            failed = any(k == "grounding" and not ok for k, _, _, ok in grounding)
+            if failed:  # never present unverified AI text as fact
+                from legumelab.bedrock import verified_summary
+                st.markdown(verified_summary(rows[idx], [r for j, r in enumerate(rows) if j != idx],
+                                             roles))
+                st.caption("Summary written directly from the optimiser's numbers, because the AI "
+                           "explanation did not pass the Amazon Bedrock Guardrails grounding check.")
+                with st.expander("AI explanation that failed the grounding check"):
+                    st.markdown(text)
+            else:
+                st.markdown(text)
+            if bad:
+                st.warning("The explanation mentions topics we have no data on ("
+                           + ", ".join(bad) + "). Treat those statements as unverified.")
             for kind, score, threshold, passed in grounding:
                 if kind.startswith("error"):
                     st.caption(f"Grounding check unavailable ({kind}).")
@@ -105,10 +118,7 @@ if st.button("Explain with AI"):
                                f"(threshold {threshold:.2f}): supported by the data given to the model.")
                 else:
                     st.warning(f"Amazon Bedrock Guardrails {kind} score {score:.2f} is below the "
-                               f"threshold {threshold:.2f}: treat this explanation as unverified.")
-            if bad:
-                st.warning("The explanation mentions topics we have no data on ("
-                           + ", ".join(bad) + "). Treat those statements as unverified.")
+                               f"threshold {threshold:.2f}.")
             st.caption("Model-generated explanation. Every number comes from the optimiser.")
             with st.expander("Data the model was given about each ingredient"):
                 st.dataframe(pd.DataFrame(roles), width="stretch")
