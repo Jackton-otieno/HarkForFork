@@ -57,7 +57,7 @@ for col, (name, b) in zip(cols, zip(table.index, blends)):
     shares = {k: v for k, v in b.fractions.items() if v > 0.001}
     fig = px.pie(names=list(shares), values=list(shares.values()), title=name, hole=0.45)
     fig.update_layout(height=280, margin=dict(t=40, b=0, l=0, r=0), showlegend=True)
-    col.plotly_chart(fig, width="stretch")
+    col.plotly_chart(fig)
 
 # ---------------- Trade-off curve ----------------
 st.subheader("Cost vs protein trade-off")
