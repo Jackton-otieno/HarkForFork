@@ -96,30 +96,26 @@ if st.button("Explain with AI"):
             roles = ingredient_roles(blends[idx], ing)
             text, bad, grounding = explain_blend(rows[idx], [r for j, r in enumerate(rows) if j != idx],
                                                  goal, roles)
+            from legumelab.bedrock import verified_summary
+            # 1) the numbers, written by code from the optimiser: always correct
+            st.markdown(verified_summary(rows[idx], [r for j, r in enumerate(rows) if j != idx], roles))
+            # 2) the AI's short "why", checked by Amazon Bedrock Guardrails
+            st.markdown("**Why this blend works (AI)**")
             failed = any(k == "grounding" and not ok for k, _, _, ok in grounding)
-            if failed:  # never present unverified AI text as fact
-                from legumelab.bedrock import verified_summary
-                st.markdown(verified_summary(rows[idx], [r for j, r in enumerate(rows) if j != idx],
-                                             roles))
-                st.caption("Summary written directly from the optimiser's numbers, because the AI "
-                           "explanation did not pass the Amazon Bedrock Guardrails grounding check.")
-                with st.expander("AI explanation that failed the grounding check"):
+            if failed or bad:
+                st.warning("This AI explanation did not pass the checks; treat it as unverified.")
+                with st.expander("Show the unverified AI explanation"):
                     st.markdown(text)
             else:
                 st.markdown(text)
-                st.caption("Model-generated explanation. Every number comes from the optimiser.")
-            if bad:
-                st.warning("The explanation mentions topics we have no data on ("
-                           + ", ".join(bad) + "). Treat those statements as unverified.")
             for kind, score, threshold, passed in grounding:
                 if kind.startswith("error"):
                     st.caption(f"Grounding check unavailable ({kind}).")
-                elif passed:
-                    st.success(f"Amazon Bedrock Guardrails {kind} score {score:.2f} "
-                               f"(threshold {threshold:.2f}): supported by the data given to the model.")
                 else:
-                    st.warning(f"Amazon Bedrock Guardrails {kind} score {score:.2f} is below the "
-                               f"threshold {threshold:.2f}.")
+                    st.caption(f"Amazon Bedrock Guardrails {kind} score {score:.2f} "
+                               f"(threshold {threshold:.2f}) {'passed' if passed else 'not passed'}.")
+            if bad:
+                st.caption("Mentions topics we have no data on: " + ", ".join(bad) + ".")
             with st.expander("Data the model was given about each ingredient"):
                 st.dataframe(pd.DataFrame(roles), width="stretch")
         except Exception as e:  # show the error instead of crashing the demo

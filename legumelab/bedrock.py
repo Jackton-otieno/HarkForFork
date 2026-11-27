@@ -49,10 +49,11 @@ SYSTEM_PROMPT = (
     "You are a food-formulation assistant for a small Kenyan flour/porridge company. "
     "You explain blends computed by an optimiser. Use ONLY the numbers given to you; "
     "never invent nutrition values. Be concise and practical. "
-    "Explain: why these ingredients complement each other (amino acids) and the trade-off "
-    "versus the other blends. Do NOT give processing steps: the app shows processing "
-    "guidance separately, from cited documents. "
-    "Format: no headings larger than ###, at most 250 words. "
+    "Write a short explanation of WHY the chosen blend works: how its ingredients complement "
+    "each other's amino acids, and why it is the cheapest option. 2 to 4 sentences, at most "
+    "80 words, no headings and no lists. The exact numbers are already shown to the user, so "
+    "use at most two numbers, copied exactly. State facts directly; never mention a 'fact "
+    "sheet'. Do NOT give processing steps: the app shows those separately, from cited documents. "
     "Never claim effects (e.g. of processing on digestibility) that are not in the numbers you were given. "
     "Compare blends ONLY on the fields provided (shares, protein, AA score, PDCAAS, limiting AA, cost). "
     "Do not mention shelf life, taste, texture, carbohydrates or any property not in those fields. "
@@ -215,6 +216,9 @@ def _explain_cached(facts: str, query: str) -> tuple[str, tuple[str, ...], tuple
         text = _converse(messages)
         bad = unsupported_terms(text)
         grounding = _safe_grounding(facts, query, text)
+    # log for calibrating the grounding threshold on real answers (server terminal)
+    print("[grounding]", ", ".join(f"{k}={sc:.2f}" for k, sc, _, _ in grounding), "|",
+          " ".join(text.split())[:160], flush=True)
     return tidy_headings(text), tuple(bad), grounding
 
 
